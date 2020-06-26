@@ -404,7 +404,7 @@ sys       80
 call      "clearScreen"
 
 macro :loop, "main" do |start_label|
-  # call    "waitFrame"
+  call    "waitFrame"
 
   call    "drawStars"
 
