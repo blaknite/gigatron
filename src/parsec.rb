@@ -313,7 +313,7 @@ macro :procedure, "spawnBullet" do
 
   ld      "bulletPointer"
   bne     "skipBulletPointerAdjust"
-  ldi     0xa0
+  ldi     -> { value_of("bullets") & 0x00ff }
   st      "bulletPointer"
   label   "skipBulletPointerAdjust"
 end
@@ -374,7 +374,7 @@ macro :procedure, "drawBullets" do
   inc     "scratchA"
   inc     "scratchA"
 
-  ldwi    -> { (value_of("bullets") & 0xff00) + 0xfe }
+  ldwi    -> { (value_of("bullets") & 0xff00) }
   xorw    "scratchA"
   bne     "drawBullet"
 end
@@ -512,10 +512,10 @@ STAR_COUNT.times do |i|
   byte    rand(159), rand(119) + 8
 end
 
-org       0x09a0
+org       0x09f0
 
 label     "bullets"
-96.times do
+16.times do
   byte    0
 end
 
