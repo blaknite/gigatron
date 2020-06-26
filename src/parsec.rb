@@ -324,7 +324,7 @@ macro :procedure, "drawBullets" do
 
   ldi     rgb_convert(0, 0, 0)
   stw     "sysArgs0"
-  ldwi    (rgb_convert(170, 0, 85) << 8) + rgb_convert(255, 0, 85)
+  ldwi    (rgb_convert(255, 0, 85) << 8) + rgb_convert(170, 0, 85)
   stw     "sysArgs2"
 
   ldwi    "bullets"
