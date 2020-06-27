@@ -232,8 +232,7 @@ macro :procedure, "drawStars" do
   inc     "scratchA"
   inc     "scratchA"
 
-  ldwi    -> { value_of("stars") + STAR_COUNT * 2 }
-  xorw    "scratchA"
+  ld      "scratchA"
   bne     "drawStar"
 end
 
@@ -340,6 +339,7 @@ macro :procedure, "drawBullets" do
   subi    159 - 4
   blt     "fillBullet"
 
+  label   "blankBullet"
   ldi     rgb_convert(0, 0, 0)
   stw     "sysArgs2"
   ldw     "scratchA"
@@ -374,8 +374,7 @@ macro :procedure, "drawBullets" do
   inc     "scratchA"
   inc     "scratchA"
 
-  ldwi    -> { (value_of("bullets") & 0xff00) }
-  xorw    "scratchA"
+  ld      "scratchA"
   bne     "drawBullet"
 end
 
@@ -505,7 +504,7 @@ end
 
 halt
 
-org       0x08a0
+org       0x0900 - STAR_COUNT * 2
 
 label     "stars"
 STAR_COUNT.times do |i|
