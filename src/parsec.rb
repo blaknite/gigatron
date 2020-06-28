@@ -186,17 +186,15 @@ macro :procedure, "moveShip_brake" do |start_label, return_label|
 end
 
 macro :procedure, "moveShip_left" do |start_label, return_label|
-  ldwi    0xff00
-  andw    "shipPos"
-  xorwi   pixel_address(0, 0)
+  ld      -> { value_of("shipPos") + 1 }
+  xori    8
   beq     return_label
   dec     -> { value_of("shipPos") + 1 }
 end
 
 macro :procedure, "moveShip_right" do |start_label, return_label|
-  ldwi    0xff00
-  andw    "shipPos"
-  xorwi   pixel_address(0, 108)
+  ld      -> { value_of("shipPos") + 1 }
+  xori    116
   beq     return_label
   inc     -> { value_of("shipPos") + 1 }
 end
@@ -209,9 +207,7 @@ macro :procedure, "drawStars" do
   ldw     "scratchA"
   deek
   stw     "scratchB"
-
-  ldw     "scratchA"
-  peek
+  andi    0xff
   bne     "fillStar"
   ldi     rgb_convert(0, 0, 0)
   doke    "scratchB"
@@ -331,11 +327,8 @@ macro :procedure, "drawBullets" do
 
   label   "drawBullet"
   ldw     "scratchA"
-  deek
-  beq     "nextBullet"
-
-  ldw     "scratchA"
   peek
+  beq     "nextBullet"
   subi    159 - 4
   blt     "fillBullet"
 
@@ -346,9 +339,9 @@ macro :procedure, "drawBullets" do
   deek
   stw     "sysArgs4"
   sys     30
-  ldwi    0x0900
-  addw    "sysArgs4"
-  stw     "sysArgs4"
+  ld      "sysArgs5"
+  addi    0x09
+  st      "sysArgs5"
   sys     30
   ldi     0
   doke    "scratchA"
@@ -365,9 +358,9 @@ macro :procedure, "drawBullets" do
   deek
   stw     "sysArgs4"
   sys     30
-  ldwi    0x0900
-  addw    "sysArgs4"
-  stw     "sysArgs4"
+  ld      "sysArgs5"
+  addi    0x09
+  st      "sysArgs5"
   sys     30
 
   label   "nextBullet"
