@@ -28,6 +28,14 @@ allocate_var "bulletPointer"
 
 org       0x0200
 
+macro :procedure, "waitFrame" do |start_label, return_label|
+  ld      "frameCount"
+  xorw    "lastFrame"
+  beq     start_label
+  ld      "frameCount"
+  st      "lastFrame"
+end
+
 macro :procedure, "drawShip_idle" do
   ldwi    "SYS_Sprite6_v3_64"
   stw     "sysFn"
@@ -232,19 +240,6 @@ macro :procedure, "drawStars" do
   bne     "drawStar"
 end
 
-ldwi      0x0400
-call      "vAC"
-
-org       0x0400
-
-macro :procedure, "waitFrame" do |start_label, return_label|
-  ld      "frameCount"
-  xorw    "lastFrame"
-  beq     start_label
-  ld      "frameCount"
-  st      "lastFrame"
-end
-
 macro :procedure, "clearScreen" do
   ldwi      "SYS_Draw4_30"
   stw       "sysFn"
@@ -293,10 +288,10 @@ end
 #   ldi     1
 # end
 
-ldwi      0x0500
+ldwi      0x0400
 call      "vAC"
 
-org       0x0500
+org       0x0400
 
 macro :procedure, "spawnBullet" do
   ldwi    0x0100 + 8
