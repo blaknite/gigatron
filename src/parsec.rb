@@ -13,6 +13,7 @@ initialize!
 loading_screen "loading.png", 40, 20
 
 load_sprite "ship.png"
+load_sprite "enemy.png"
 
 allocate_var "lastFrame"
 
@@ -22,6 +23,7 @@ allocate_var "scratchC"
 allocate_var "scratchD"
 
 allocate_var "shipPos"
+allocate_var "enemyPos"
 
 allocate_var "gunCooldown"
 allocate_var "bulletPointer"
@@ -366,6 +368,21 @@ macro :procedure, "drawBullets" do
   bne     "drawBullet"
 end
 
+macro :procedure, "drawEnemy" do
+  ldwi    "SYS_Sprite6_v3_64"
+  stw     "sysFn"
+
+  ldwi    "enemy_0"
+  stw     "sysArgs0"
+  ldw     "enemyPos"
+  sys     64
+  stw     "scratchA"
+  ldwi    "enemy_1"
+  stw     "sysArgs0"
+  ldw     "scratchA"
+  sys     64
+end
+
 ldwi      0x0600
 call      "vAC"
 
@@ -376,6 +393,8 @@ stw       "lastFrame"
 
 ldwi      pixel_address(74, 54)
 stw       "shipPos"
+ldwi      pixel_address(140, 54)
+stw       "enemyPos"
 
 ldi       GUN_COOLDOWN
 stw       "gunCooldown"
@@ -488,6 +507,8 @@ macro :loop, "main" do |start_label|
   label   "shootDone"
 
   call    "drawBullets"
+
+  call    "drawEnemy"
 end
 
 halt
