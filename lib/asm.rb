@@ -169,8 +169,8 @@ def subi(operand)
   byte(0xe6, operand)
 end
 
-def lslw(operand)
-  byte(0xe9, operand)
+def lslw
+  byte(0xe9)
 end
 
 def stlw(operand)
@@ -321,10 +321,10 @@ def _eval_byte(byte)
 end
 
 def macro(method, *args, &block)
-  send("macro_#{method}", *args, &block)
+  send("gt_#{method}", *args, &block)
 end
 
-def macro_procedure(name, &block)
+def gt_procedure(name, &block)
   start_label = "#{name}--start"
   return_label = "#{name}--return"
   store_label = "#{name}--store"
@@ -342,7 +342,7 @@ def macro_procedure(name, &block)
   stw       name
 end
 
-def macro_loop(name, &block)
+def gt_loop(name, &block)
   label     name
 
   yield(name)
@@ -359,7 +359,7 @@ def rgb_convert(red, green, blue)
 end
 
 def pixel_address(x, y)
-  $_labels["screenMemory"] + x + ( y * 0x0100)
+  $_labels["screenMemory"] + x + ( y << 8 )
 end
 
 def load_sprite(file)
