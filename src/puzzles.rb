@@ -11,6 +11,15 @@ BOARD_ORIGIN_Y = 24
 BOARD_WIDTH = 6
 BOARD_HEIGHT = 12
 
+RED = rgb_convert(255, 0, 0)
+RED_SMASHER = rgb_convert(170, 0, 0)
+BLUE = rgb_convert(0, 85, 255)
+BLUE_SMASHER = rgb_convert(0, 0, 255)
+ORANGE = rgb_convert(255, 170, 0)
+ORANGE_SMASHER = rgb_convert(170, 85, 0)
+PURPLE = rgb_convert(170, 0, 255)
+PURPLE_SMASHER = rgb_convert(85, 0, 170)
+
 GEM_SIZE = 6
 
 SMASHED_GEM =
@@ -25,6 +34,7 @@ allocate_var "lastFrame"
 
 allocate_var "scratch_a"
 allocate_var "scratch_b"
+allocate_var "scratch_c"
 
 allocate_var "tickCounter", 1
 allocate_var "tickRate"
@@ -40,7 +50,7 @@ allocate_var "nextGem_colorA", 1
 allocate_var "nextGem_colorB", 1
 
 def board_address(x, y)
-  value_of("board") + x + ( y * 12 )
+  value_of("board") + x + ( y * BOARD_WIDTH )
 end
 
 def board_pixel_address(x, y)
@@ -151,6 +161,54 @@ gt_procedure "drawBoard" do
 
   xori      board_pixel_address(7, 0) & 0xff
   bne       "drawBottom_nextCell"
+end
+
+gt_procedure "generateGem" do
+  ldwi      "SYS_Random_34"
+  stw       "sysFn"
+  sys       34
+  # Random value between 0-3 for gem color
+  ld        -> { value_of("entropy") + 0 }
+  andi      3
+  addi      2
+  stw       "scratch_a"
+  # Random value between 0-3 for smasher. if == 0 then smasher.
+  ld        -> { value_of("entropy") + 1 }
+  andi      3
+  bne       "returnGem"
+  ldi       4
+  addw      "scratch_a"
+  st        "scratch_a"
+  label     "returnGem"
+  ld        "scratch_a"
+end
+
+gt_procedure "spawnGem" do
+  push
+
+  # Set current gem:
+  #   - colors from next gem A and B
+  #   - position, rotation, and order are reset
+  ld        "nextGem_colorA"
+  st        "currentGem_colorA"
+  ld        "nextGem_colorB"
+  st        "currentGem_colorB"
+  ldi       2 * GEM_SIZE
+  st        "currentGem_posX"
+  ldi       0
+  st        "currentGem_posY"
+  st        "currentGem_rotation"
+  st        "currentGem_order"
+
+  # Generate next gem A
+  call      "generateGem"
+  st        "currentGem_colorA"
+
+  # Generate next gem B
+  call      "generateGem"
+  st        "currentGem_colorB"
+
+  pop
 end
 
 ldwi        0x0300
@@ -287,55 +345,6 @@ ldwi        0x0400
 call        "vAC"
 
 org         0x0400
-
-gt_procedure "spawnGem" do
-  push
-
-  # Set current gem:
-  #   - colors from next gem A and B
-  #   - position, rotation, and order are reset
-  ld        "nextGem_colorA"
-  st        "currentGem_colorA"
-  ld        "nextGem_colorB"
-  st        "currentGem_colorB"
-  ldi       2 * GEM_SIZE
-  st        "currentGem_posX"
-  ldi       0
-  st        "currentGem_posY"
-  ldi       0
-  st        "currentGem_rotation"
-  st        "currentGem_order"
-
-  # Generate next gem A
-  call      "generateGem"
-  st        "currentGem_colorA"
-
-  # Generate next gem B
-  call      "generateGem"
-  st        "currentGem_colorB"
-
-  pop
-end
-
-gt_procedure "generateGem" do
-  ldwi      "SYS_Random_34"
-  stw       "sysFn"
-  sys       34
-  # Random value between 0-3 for gem color
-  ld        -> { value_of("entropy") + 0 }
-  andi      3
-  addi      2
-  stw       "scratch_a"
-  # Random value between 0-3 for smasher. if == 0 then smasher.
-  ld        -> { value_of("entropy") + 1 }
-  andi      3
-  bne       "returnGem"
-  ldi       4
-  addw      "scratch_a"
-  st        "scratch_a"
-  label     "returnGem"
-  ld        "scratch_a"
-end
 
 gt_procedure "check" do
   push
@@ -629,6 +638,9 @@ gt_procedure "handleInputRight" do
 end
 
 gt_procedure "gravity" do
+  ldwi      "SYS_Sprite6_v3_64"
+  stw       "sysFn"
+
   ldwi      board_pixel_address(5, 10)
   stw       "scratch_a"
 
@@ -636,21 +648,35 @@ gt_procedure "gravity" do
   ldw       "scratch_a"
   peek
   beq       "gravity_nextCell"
+
   ldwi      GEM_SIZE << 8
   addw      "scratch_a"
   stw       "scratch_b"
   peek
   bne       "gravity_nextCell"
-  ldw       "scratch_a"
+
+  ldwi      0x0202
+  addw      "scratch_a"
   peek
-  poke      "scratch_b"
-  ldi       0
-  poke      "scratch_a"
+  lslw
+  stw       "scratch_c"
+  ldwi      "gemPointers_color"
+  addw      "scratch_c"
+  deek
+  stw       "sysArgs0"
+  ldw       "scratch_b"
+  sys       64
+  ldwi      "gems_0"
+  stw       "sysArgs0"
+  ldw       "scratch_a"
+  sys       64
+  bra       "gravity_nextCell"
+
   label     "gravity_nextCell"
   ldw       "scratch_a"
   subi      GEM_SIZE
   stw       "scratch_a"
-  ldwi      board_pixel_address(0, 10)
+  ldwi      board_pixel_address(-1, 10)
   xorw      "scratch_a"
   bne       "gravity_loop"
 end
@@ -841,5 +867,39 @@ label       "gemPointers"
   byte      -> { value_of("gems_#{i}") & 0xff }
   byte      -> { value_of("gems_#{i}") >> 8 }
 end
+
+label       "gemPointers_color", 0x0fa0
+
+org         0x0fa0 + RED * 2
+byte        -> { value_of("gems_2") & 0xff }
+byte        -> { value_of("gems_2") >> 8 }
+
+org         0x0fa0 + BLUE * 2
+byte        -> { value_of("gems_3") & 0xff }
+byte        -> { value_of("gems_3") >> 8 }
+
+org         0x0fa0 + ORANGE * 2
+byte        -> { value_of("gems_4") & 0xff }
+byte        -> { value_of("gems_4") >> 8 }
+
+org         0x0fa0 + PURPLE * 2
+byte        -> { value_of("gems_5") & 0xff }
+byte        -> { value_of("gems_5") >> 8 }
+
+org         0x0fa0 + RED_SMASHER * 2
+byte        -> { value_of("gems_6") & 0xff }
+byte        -> { value_of("gems_6") >> 8 }
+
+org         0x0fa0 + BLUE_SMASHER * 2
+byte        -> { value_of("gems_7") & 0xff }
+byte        -> { value_of("gems_7") >> 8 }
+
+org         0x0fa0 + ORANGE_SMASHER * 2
+byte        -> { value_of("gems_8") & 0xff }
+byte        -> { value_of("gems_8") >> 8 }
+
+org         0x0fa0 + PURPLE_SMASHER * 2
+byte        -> { value_of("gems_9") & 0xff }
+byte        -> { value_of("gems_9") >> 8 }
 
 done        0x0200
