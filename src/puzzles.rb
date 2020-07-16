@@ -11,13 +11,15 @@ BOARD_ORIGIN_Y = 24
 BOARD_WIDTH = 6
 BOARD_HEIGHT = 12
 
+BLACK = rgb_convert(0, 0, 0)
+GREY = rgb_convert(85, 85, 85)
 RED = rgb_convert(255, 0, 0)
-RED_SMASHER = rgb_convert(170, 0, 0)
 BLUE = rgb_convert(0, 85, 255)
-BLUE_SMASHER = rgb_convert(0, 0, 255)
 ORANGE = rgb_convert(255, 170, 0)
-ORANGE_SMASHER = rgb_convert(170, 85, 0)
 PURPLE = rgb_convert(170, 0, 255)
+RED_SMASHER = rgb_convert(170, 0, 0)
+BLUE_SMASHER = rgb_convert(0, 0, 255)
+ORANGE_SMASHER = rgb_convert(170, 85, 0)
 PURPLE_SMASHER = rgb_convert(85, 0, 170)
 
 GEM_SIZE = 6
@@ -193,10 +195,9 @@ gt_procedure "spawnGem" do
   st        "currentGem_colorA"
   ld        "nextGem_colorB"
   st        "currentGem_colorB"
-  ldi       2 * GEM_SIZE
-  st        "currentGem_posX"
+  ldwi      board_pixel_address(2, 0)
+  stw       "currentGem_posX"
   ldi       0
-  st        "currentGem_posY"
   st        "currentGem_rotation"
   st        "currentGem_order"
 
@@ -223,10 +224,8 @@ gt_procedure "eraseCurrentGem" do
   ldwi      "gems_0"
   stw       "sysArgs0"
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_b"
-
   sys       64
 
   ldwi      "gems_0"
@@ -282,10 +281,8 @@ gt_procedure "drawCurrentGem" do
   deek
   stw       "sysArgs0"
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_b"
-
   sys       64
 
   ld        "currentGem_order"
@@ -349,8 +346,7 @@ org         0x0400
 gt_procedure "check" do
   push
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_a"
 
   ld        "currentGem_rotation"
@@ -412,7 +408,6 @@ gt_procedure "checkAndDrop" do
   ld        "currentGem_posY"
   subi      GEM_SIZE
   st        "currentGem_posY"
-
 
   call      "drawCurrentGem"
   call      "spawnGem"
@@ -508,8 +503,7 @@ gt_procedure "handleInputLeft" do
   xori      BUTTON_LEFT
   st        "buttonState"
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_a"
 
   ld        "currentGem_rotation"
@@ -579,8 +573,7 @@ gt_procedure "handleInputRight" do
   xori      BUTTON_RIGHT
   st        "buttonState"
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_a"
 
   ld        "currentGem_rotation"
@@ -649,34 +642,67 @@ gt_procedure "gravity" do
   peek
   beq       "gravity_nextCell"
 
-  ldwi      GEM_SIZE << 8
-  addw      "scratch_a"
-  stw       "scratch_b"
-  peek
-  bne       "gravity_nextCell"
-
   ldwi      0x0202
   addw      "scratch_a"
   peek
-  lslw
-  stw       "scratch_c"
-  ldwi      "gemPointers_color"
-  addw      "scratch_c"
+  stw       "scratch_b"
+  ldwi      "gemPointers_reverse"
+  addw      "scratch_b"
+  peek
+  stw       "scratch_b"
+  ldwi      "gemPointers"
+  addw      "scratch_b"
   deek
-  stw       "sysArgs0"
-  ldw       "scratch_b"
-  sys       64
+  stw       "scratch_b"
+
+  ldwi      GEM_SIZE << 8
+  addw      "scratch_a"
+  peek
+  bne       "gravity_nextCell"
+
+  label     "gravity_blankCell"
   ldwi      "gems_0"
   stw       "sysArgs0"
   ldw       "scratch_a"
   sys       64
+
+  ldw       "scratch_a"
+  stw       "scratch_c"
+
+  label     "gravity_findBase"
+  ldw       "scratch_c"
+  peek
+  bne       "gravity_drawCell"
+  ldwi      GEM_SIZE << 8
+  addw      "scratch_c"
+  stw       "scratch_c"
+  bra       "gravity_findBase"
+
+  label     "gravity_drawCell"
+  ld        -> { value_of("scratch_c") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_c") + 1 }
+  ldw       "scratch_b"
+  stw       "sysArgs0"
+  ldw       "scratch_c"
+  sys       64
   bra       "gravity_nextCell"
 
   label     "gravity_nextCell"
-  ldw       "scratch_a"
+  ld        "scratch_a"
   subi      GEM_SIZE
-  stw       "scratch_a"
-  ldwi      board_pixel_address(-1, 10)
+  st        "scratch_a"
+  ld        "scratch_a"
+  xori      board_pixel_address(-1, 0) & 255
+  bne       "gravity_loop"
+
+  ldi       board_pixel_address(5, 0) & 255
+  st        "scratch_a"
+
+  ld        -> { value_of("scratch_a") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_a") + 1 }
+  ldwi      board_pixel_address(5, -1)
   xorw      "scratch_a"
   bne       "gravity_loop"
 end
@@ -868,38 +894,26 @@ label       "gemPointers"
   byte      -> { value_of("gems_#{i}") >> 8 }
 end
 
-label       "gemPointers_color", 0x0fa0
-
-org         0x0fa0 + RED * 2
-byte        -> { value_of("gems_2") & 0xff }
-byte        -> { value_of("gems_2") >> 8 }
-
-org         0x0fa0 + BLUE * 2
-byte        -> { value_of("gems_3") & 0xff }
-byte        -> { value_of("gems_3") >> 8 }
-
-org         0x0fa0 + ORANGE * 2
-byte        -> { value_of("gems_4") & 0xff }
-byte        -> { value_of("gems_4") >> 8 }
-
-org         0x0fa0 + PURPLE * 2
-byte        -> { value_of("gems_5") & 0xff }
-byte        -> { value_of("gems_5") >> 8 }
-
-org         0x0fa0 + RED_SMASHER * 2
-byte        -> { value_of("gems_6") & 0xff }
-byte        -> { value_of("gems_6") >> 8 }
-
-org         0x0fa0 + BLUE_SMASHER * 2
-byte        -> { value_of("gems_7") & 0xff }
-byte        -> { value_of("gems_7") >> 8 }
-
-org         0x0fa0 + ORANGE_SMASHER * 2
-byte        -> { value_of("gems_8") & 0xff }
-byte        -> { value_of("gems_8") >> 8 }
-
-org         0x0fa0 + PURPLE_SMASHER * 2
-byte        -> { value_of("gems_9") & 0xff }
-byte        -> { value_of("gems_9") >> 8 }
+label       "gemPointers_reverse", 0x0fa0
+org         0x0fa0 + BLACK
+byte        0
+org         0x0fa0 + GREY
+byte        2
+org         0x0fa0 + RED
+byte        4
+org         0x0fa0 + BLUE
+byte        6
+org         0x0fa0 + ORANGE
+byte        8
+org         0x0fa0 + PURPLE
+byte        10
+org         0x0fa0 + RED_SMASHER
+byte        12
+org         0x0fa0 + BLUE_SMASHER
+byte        14
+org         0x0fa0 + ORANGE_SMASHER
+byte        16
+org         0x0fa0 + PURPLE_SMASHER
+byte        18
 
 done        0x0200
