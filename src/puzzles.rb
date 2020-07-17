@@ -24,8 +24,6 @@ PURPLE_SMASHER = rgb_convert(85, 0, 170)
 
 GEM_SIZE = 6
 
-SMASHED_GEM =
-
 name        "puzzles"
 
 initialize!
@@ -37,6 +35,8 @@ allocate_var "lastFrame"
 allocate_var "scratch_a"
 allocate_var "scratch_b"
 allocate_var "scratch_c"
+allocate_var "scratch_d"
+allocate_var "scratch_e"
 
 allocate_var "tickCounter", 1
 allocate_var "tickRate"
@@ -51,6 +51,10 @@ allocate_var "currentGem_order", 1
 allocate_var "nextGem_colorA", 1
 allocate_var "nextGem_colorB", 1
 
+allocate_var "smasherPos"
+allocate_var "smashSP"
+allocate_var "smashCheckedSP"
+
 def board_address(x, y)
   value_of("board") + x + ( y * BOARD_WIDTH )
 end
@@ -62,45 +66,6 @@ def board_pixel_address(x, y)
 end
 
 org         0x0200
-
-gt_procedure "waitFrame" do |start_label, return_label|
-  ld        "frameCount"
-  xorw      "lastFrame"
-  beq       start_label
-  ld        "frameCount"
-  st        "lastFrame"
-end
-
-gt_procedure "clearScreen" do
-  ldwi      "SYS_Draw4_30"
-  stw       "sysFn"
-
-  ldi       rgb_convert(0, 0, 0)
-  stw       "sysArgs0"
-  stw       "sysArgs2"
-
-  ldwi      pixel_address(0, 0)
-  stw       "sysArgs4"
-
-  label     "clearScreen_nextPixel"
-  sys       30
-
-  ld        "sysArgs4"
-  addi      4
-  st        "sysArgs4"
-
-  xori      160
-  bne       "clearScreen_nextPixel"
-  st        "sysArgs4"
-
-  ld        "sysArgs5"
-  addi      1
-  st        "sysArgs5"
-
-  ldwi      pixel_address(0,120)
-  xorw      "sysArgs4"
-  bne       "clearScreen_nextPixel"
-end
 
 gt_procedure "drawBoard" do
   ldwi      "SYS_Sprite6_v3_64"
@@ -164,184 +129,6 @@ gt_procedure "drawBoard" do
   xori      board_pixel_address(7, 0) & 0xff
   bne       "drawBottom_nextCell"
 end
-
-gt_procedure "generateGem" do
-  ldwi      "SYS_Random_34"
-  stw       "sysFn"
-  sys       34
-  # Random value between 0-3 for gem color
-  ld        -> { value_of("entropy") + 0 }
-  andi      3
-  addi      2
-  stw       "scratch_a"
-  # Random value between 0-3 for smasher. if == 0 then smasher.
-  ld        -> { value_of("entropy") + 1 }
-  andi      3
-  bne       "returnGem"
-  ldi       4
-  addw      "scratch_a"
-  st        "scratch_a"
-  label     "returnGem"
-  ld        "scratch_a"
-end
-
-gt_procedure "spawnGem" do
-  push
-
-  # Set current gem:
-  #   - colors from next gem A and B
-  #   - position, rotation, and order are reset
-  ld        "nextGem_colorA"
-  st        "currentGem_colorA"
-  ld        "nextGem_colorB"
-  st        "currentGem_colorB"
-  ldwi      board_pixel_address(2, 0)
-  stw       "currentGem_posX"
-  ldi       0
-  st        "currentGem_rotation"
-  st        "currentGem_order"
-
-  # Generate next gem A
-  call      "generateGem"
-  st        "currentGem_colorA"
-
-  # Generate next gem B
-  call      "generateGem"
-  st        "currentGem_colorB"
-
-  pop
-end
-
-ldwi        0x0300
-call        "vAC"
-
-org         0x0300
-
-gt_procedure "eraseCurrentGem" do
-  ldwi      "SYS_Sprite6_v3_64"
-  stw       "sysFn"
-
-  ldwi      "gems_0"
-  stw       "sysArgs0"
-
-  ldw       "currentGem_posX"
-  stw       "scratch_b"
-  sys       64
-
-  ldwi      "gems_0"
-  stw       "sysArgs0"
-
-  ld        "currentGem_rotation"
-  beq       "eraseCurrentGem_rotation_0"
-  subi      1
-  beq       "eraseCurrentGem_rotation_1"
-  subi      1
-  beq       "eraseCurrentGem_rotation_2"
-
-  label     "eraseCurrentGem_rotation_3"
-  ld        -> { value_of("scratch_b") + 1 }
-  subi      GEM_SIZE
-  st        -> { value_of("scratch_b") + 1 }
-  ldw       "scratch_b"
-  sys       64
-  bra       "eraseCurrentGem_rotationDone"
-
-  label     "eraseCurrentGem_rotation_2"
-  ldw       "scratch_b"
-  subi      GEM_SIZE
-  sys       64
-  bra       "eraseCurrentGem_rotationDone"
-
-  label     "eraseCurrentGem_rotation_1"
-  ldwi      GEM_SIZE << 8
-  addw      "scratch_b"
-  sys       64
-  bra       "eraseCurrentGem_rotationDone"
-
-  label     "eraseCurrentGem_rotation_0"
-  ldw       "scratch_b"
-  addi      GEM_SIZE
-  sys       64
-  label     "eraseCurrentGem_rotationDone"
-end
-
-gt_procedure "drawCurrentGem" do
-  ldwi      "SYS_Sprite6_v3_64"
-  stw       "sysFn"
-
-  ld        "currentGem_order"
-  beq       "gemA_order0"
-  ld        "currentGem_colorB"
-  bra       "gemA_checkDone"
-  label     "gemA_order0"
-  ld        "currentGem_colorA"
-  label     "gemA_checkDone"
-  lslw
-  addwi     "gemPointers"
-  deek
-  stw       "sysArgs0"
-
-  ldw       "currentGem_posX"
-  stw       "scratch_b"
-  sys       64
-
-  ld        "currentGem_order"
-  beq       "gemB_order0"
-  ld        "currentGem_colorA"
-  bra       "gemB_checkDone"
-  label     "gemB_order0"
-  ld        "currentGem_colorB"
-  label     "gemB_checkDone"
-  lslw
-  addwi     "gemPointers"
-  deek
-  stw       "scratch_a"
-  ld        "currentGem_rotation"
-  beq       "drawCurrentGem_rotation_0"
-  subi      1
-  beq       "drawCurrentGem_rotation_1"
-  subi      1
-  beq       "drawCurrentGem_rotation_2"
-
-  label     "drawCurrentGem_rotation_3"
-  ldw       "scratch_a"
-  stw       "sysArgs0"
-  ld        -> { value_of("scratch_b") + 1 }
-  subi      GEM_SIZE
-  st        -> { value_of("scratch_b") + 1 }
-  ldw       "scratch_b"
-  sys       64
-  bra       "drawCurrentGem_rotationDone"
-
-  label     "drawCurrentGem_rotation_2"
-  ldw       "scratch_a"
-  stw       "sysArgs0"
-  ldw       "scratch_b"
-  subi      GEM_SIZE
-  sys       64
-  bra       "drawCurrentGem_rotationDone"
-
-  label     "drawCurrentGem_rotation_1"
-  ldw       "scratch_a"
-  stw       "sysArgs0"
-  ldwi      GEM_SIZE << 8
-  addw      "scratch_b"
-  sys       64
-  bra       "drawCurrentGem_rotationDone"
-
-  label     "drawCurrentGem_rotation_0"
-  ldw       "scratch_a"
-  stw       "sysArgs0"
-  ldw       "scratch_b"
-  addi      GEM_SIZE
-  sys       64
-  label     "drawCurrentGem_rotationDone"
-end
-
-ldwi        0x0400
-call        "vAC"
-
-org         0x0400
 
 gt_procedure "check" do
   push
@@ -416,10 +203,138 @@ gt_procedure "checkAndDrop" do
   pop
 end
 
-ldwi        0x0500
+ldwi        0x0300
 call        "vAC"
 
-org         0x0500
+org         0x0300
+
+gt_procedure "eraseCurrentGem" do
+  ldwi      "SYS_Sprite6_v3_64"
+  stw       "sysFn"
+
+  ldwi      "gems_0"
+  stw       "sysArgs0"
+
+  ldw       "currentGem_posX"
+  stw       "scratch_b"
+  sys       64
+
+  ldwi      "gems_0"
+  stw       "sysArgs0"
+
+  ld        "currentGem_rotation"
+  beq       "eraseCurrentGem_rotation_0"
+  subi      1
+  beq       "eraseCurrentGem_rotation_1"
+  subi      1
+  beq       "eraseCurrentGem_rotation_2"
+
+  label     "eraseCurrentGem_rotation_3"
+  ld        -> { value_of("scratch_b") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_b") + 1 }
+  ldw       "scratch_b"
+  sys       64
+  bra       "eraseCurrentGem_rotationDone"
+
+  label     "eraseCurrentGem_rotation_2"
+  ldw       "scratch_b"
+  subi      GEM_SIZE
+  sys       64
+  bra       "eraseCurrentGem_rotationDone"
+
+  label     "eraseCurrentGem_rotation_1"
+  ldwi      GEM_SIZE << 8
+  addw      "scratch_b"
+  sys       64
+  bra       "eraseCurrentGem_rotationDone"
+
+  label     "eraseCurrentGem_rotation_0"
+  ldw       "scratch_b"
+  addi      GEM_SIZE
+  sys       64
+  label     "eraseCurrentGem_rotationDone"
+end
+
+gt_procedure "drawCurrentGem" do
+  ldwi      "SYS_Sprite6_v3_64"
+  stw       "sysFn"
+
+  ld        "currentGem_order"
+  beq       "drawCurrentGem_order0"
+
+  label     "drawCurrentGem_order1"
+  ld        "currentGem_colorB"
+  st        "scratch_d"
+  ld        "currentGem_colorA"
+  bra       "drawCurrentGem_checkDone"
+
+  label     "drawCurrentGem_order0"
+  ld        "currentGem_colorA"
+  st        "scratch_d"
+  ld        "currentGem_colorB"
+  label     "drawCurrentGem_checkDone"
+
+  lslw
+  addwi     "gemPointers"
+  deek
+  stw       "sysArgs0"
+
+  ldw       "currentGem_posX"
+  stw       "scratch_b"
+  sys       64
+
+  ld        "scratch_d"
+  lslw
+  addwi     "gemPointers"
+  deek
+  stw       "scratch_a"
+  ld        "currentGem_rotation"
+  beq       "drawCurrentGem_rotation_0"
+  subi      1
+  beq       "drawCurrentGem_rotation_1"
+  subi      1
+  beq       "drawCurrentGem_rotation_2"
+
+  label     "drawCurrentGem_rotation_3"
+  ldw       "scratch_a"
+  stw       "sysArgs0"
+  ld        -> { value_of("scratch_b") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_b") + 1 }
+  ldw       "scratch_b"
+  sys       64
+  bra       "drawCurrentGem_rotationDone"
+
+  label     "drawCurrentGem_rotation_2"
+  ldw       "scratch_a"
+  stw       "sysArgs0"
+  ldw       "scratch_b"
+  subi      GEM_SIZE
+  sys       64
+  bra       "drawCurrentGem_rotationDone"
+
+  label     "drawCurrentGem_rotation_1"
+  ldw       "scratch_a"
+  stw       "sysArgs0"
+  ldwi      GEM_SIZE << 8
+  addw      "scratch_b"
+  sys       64
+  bra       "drawCurrentGem_rotationDone"
+
+  label     "drawCurrentGem_rotation_0"
+  ldw       "scratch_a"
+  stw       "sysArgs0"
+  ldw       "scratch_b"
+  addi      GEM_SIZE
+  sys       64
+  label     "drawCurrentGem_rotationDone"
+end
+
+ldwi        0x0400
+call        "vAC"
+
+org         0x0400
 
 gt_procedure "handleInputRotate" do
   ld        "buttonState"
@@ -429,8 +344,7 @@ gt_procedure "handleInputRotate" do
   xori      BUTTON_A
   st        "buttonState"
 
-  ldwi      board_pixel_address(0, 0)
-  addw      "currentGem_posX"
+  ldw       "currentGem_posX"
   stw       "scratch_a"
 
   ld        "currentGem_rotation"
@@ -560,10 +474,10 @@ gt_procedure "handleInputLeft" do
   label     "handleInputLeft_done"
 end
 
-ldwi        0x0600
+ldwi        0x0500
 call        "vAC"
 
-org         0x0600
+org         0x0500
 
 gt_procedure "handleInputRight" do
   ld        "buttonState"
@@ -707,10 +621,249 @@ gt_procedure "gravity" do
   bne       "gravity_loop"
 end
 
+ldwi        0x0600
+call        "vAC"
+
+org         0x0600
+
+gt_procedure "detectSmasher" do
+  ldwi      "smashStack"
+  stw       "smashSP"
+  ldi       0
+  doke      "smashSP"
+
+  ldwi      board_pixel_address(5, 12)
+  stw       "scratch_a"
+
+  label     "detectSmasher_loop"
+  ldwi      0x0202
+  addw      "scratch_a"
+  peek
+  stw       "scratch_b"
+  ldwi      "gemPointers_isSmasher"
+  addw      "scratch_b"
+  peek
+  bne       "detectSmasher_nextCell"
+
+  inc       "smashSP"
+  inc       "smashSP"
+  ldw       "scratch_a"
+  doke      "smashSP"
+  bra       "detectSmasher_done"
+
+  label     "detectSmasher_nextCell"
+  ld        "scratch_a"
+  subi      GEM_SIZE
+  st        "scratch_a"
+  xori      board_pixel_address(-1, 0) & 255
+  bne       "detectSmasher_loop"
+
+  ldi       board_pixel_address(5, 0) & 255
+  st        "scratch_a"
+
+  ld        -> { value_of("scratch_a") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_a") + 1 }
+  ldwi      board_pixel_address(5, -1)
+  xorw      "scratch_a"
+  bne       "detectSmasher_loop"
+
+  label     "detectSmasher_done"
+end
+
+gt_procedure "createGroup" do
+  push
+
+  ldw       "smashSP"
+  deek
+  beq       "createGroup_done"
+  peek
+  stw       "scratch_b"
+
+  ldwi      "SYS_Sprite6_v3_64"
+  stw       "sysFn"
+
+  ldwi      "smashCheckedStack"
+  stw       "smashCheckedSP"
+
+  label     "createGroup_loop"
+  ldw       "smashSP"
+  deek
+  beq       "createGroup_done"
+  stw       "scratch_a"
+  ldw       "smashSP"
+  subi      2
+  stw       "smashSP"
+
+  ldwi      "smashCheckedStack"
+  stw       "scratch_e"
+  label     "createGroup_checkLoop"
+  ldw       "scratch_e"
+  xorw      "smashCheckedSP"
+  beq       "createGroup_checkLoopDone"
+  ldw       "scratch_e"
+  deek
+  xorw      "scratch_a"
+  beq       "createGroup_loop"
+  ldw       "scratch_e"
+  addi      2
+  stw       "scratch_e"
+  bne       "createGroup_checkLoop"
+  label     "createGroup_checkLoopDone"
+
+  ldw       "scratch_a"
+  peek
+  xorw      "scratch_b"
+  bne       "createGroup_loop"
+
+  ldwi      "gemPointers_getSmashed"
+  addw      "scratch_b"
+  peek
+  stw       "scratch_d"
+  ldwi      "gemPointers"
+  addw      "scratch_d"
+  deek
+  stw       "scratch_d"
+
+  ldw       "scratch_d"
+  stw       "sysArgs0"
+  ldw       "scratch_a"
+  sys       64
+
+  ldw       "scratch_a"
+  doke      "smashCheckedSP"
+  inc       "smashCheckedSP"
+  inc       "smashCheckedSP"
+
+  call      "createGroup_checkNorth"
+  call      "createGroup_checkEast"
+  call      "createGroup_checkSouth"
+  call      "createGroup_checkWest"
+
+  bra       "createGroup_loop"
+
+  label     "createGroup_done"
+  pop
+end
+
 ldwi        0x08a0
 call        "vAC"
 
 org         0x08a0
+
+gt_procedure "createGroup_checkNorth" do
+  ldw       "scratch_a"
+  stw       "scratch_c"
+  ld        -> { value_of("scratch_c") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_c") + 1 }
+  ldw       "scratch_c"
+  peek
+  xori      GREY
+  beq       "createGroup_checkNorth_done"
+  inc       "smashSP"
+  inc       "smashSP"
+  ldw       "scratch_c"
+  doke      "smashSP"
+  label     "createGroup_checkNorth_done"
+end
+
+gt_procedure "createGroup_checkEast" do
+  ldw       "scratch_a"
+  addi      GEM_SIZE
+  stw       "scratch_c"
+  peek
+  xori      GREY
+  beq       "createGroup_checkEast_done"
+  inc       "smashSP"
+  inc       "smashSP"
+  ldw       "scratch_c"
+  doke      "smashSP"
+  label     "createGroup_checkEast_done"
+end
+
+ldwi        0x09a0
+call        "vAC"
+
+org         0x09a0
+
+gt_procedure "createGroup_checkSouth" do
+  ldwi      GEM_SIZE << 8
+  addw      "scratch_a"
+  stw       "scratch_c"
+  peek
+  xori      GREY
+  beq       "createGroup_checkSouth_done"
+  inc       "smashSP"
+  inc       "smashSP"
+  ldw       "scratch_c"
+  doke      "smashSP"
+  label     "createGroup_checkSouth_done"
+end
+
+gt_procedure "createGroup_checkWest" do
+  ldw       "scratch_a"
+  subi      GEM_SIZE
+  stw       "scratch_c"
+  peek
+  xori      GREY
+  beq       "createGroup_checkWest_done"
+  inc       "smashSP"
+  inc       "smashSP"
+  ldw       "scratch_c"
+  doke      "smashSP"
+  label     "createGroup_checkWest_done"
+end
+
+ldwi        0x0aa0
+call        "vAC"
+
+org         0x0aa0
+
+gt_procedure "smash" do
+  ldwi      "SYS_Sprite6_v3_64"
+  stw       "sysFn"
+
+  ldwi      board_pixel_address(5, 12)
+  stw       "scratch_a"
+
+  label     "smash_loop"
+  ldwi      0x0101
+  addw      "scratch_a"
+  peek
+  stw       "scratch_b"
+  ldwi      "gemPointers_isSmasher"
+  addw      "scratch_b"
+  peek
+  bne       "smash_nextCell"
+
+  ldwi      "gems_0"
+  stw       "sysArgs0"
+  ldw       "scratch_a"
+  sys       64
+
+  label     "smash_nextCell"
+  ld        "scratch_a"
+  subi      GEM_SIZE
+  st        "scratch_a"
+  xori      board_pixel_address(-1, 0) & 255
+  bne       "smash_loop"
+
+  ldi       board_pixel_address(5, 0) & 255
+  st        "scratch_a"
+
+  ld        -> { value_of("scratch_a") + 1 }
+  subi      GEM_SIZE
+  st        -> { value_of("scratch_a") + 1 }
+  ldwi      board_pixel_address(5, -1)
+  xorw      "scratch_a"
+  bne       "smash_loop"
+end
+
+ldwi        0x0ba0
+call        "vAC"
+
+org         0x0ba0
 
 gt_procedure "handleInputSwitch" do
   ld        "buttonState"
@@ -729,11 +882,6 @@ gt_procedure "handleInputSwitch" do
   st        "currentGem_order"
   label     "handleInputSwitch_done"
 end
-
-ldwi        0x09a0
-call        "vAC"
-
-org         0x09a0
 
 gt_procedure "handleInputUp" do
   push
@@ -756,14 +904,113 @@ gt_procedure "handleInputUp" do
   subi      GEM_SIZE
   st        "currentGem_posY"
 
+  call      "drawCurrentGem"
+  call      "spawnGem"
+
   label     "handleInputUp_done"
   pop
 end
 
-ldwi        0x0aa0
+ldwi        0x13a0
 call        "vAC"
 
-org         0x0aa0
+org         0x13a0
+
+gt_procedure "waitFrame" do |start_label, return_label|
+  ld        "frameCount"
+  xorw      "lastFrame"
+  beq       start_label
+  ld        "frameCount"
+  st        "lastFrame"
+end
+
+gt_procedure "clearScreen" do
+  ldwi      "SYS_Draw4_30"
+  stw       "sysFn"
+
+  ldi       rgb_convert(0, 0, 0)
+  stw       "sysArgs0"
+  stw       "sysArgs2"
+
+  ldwi      pixel_address(0, 0)
+  stw       "sysArgs4"
+
+  label     "clearScreen_nextPixel"
+  sys       30
+
+  ld        "sysArgs4"
+  addi      4
+  st        "sysArgs4"
+
+  xori      160
+  bne       "clearScreen_nextPixel"
+  st        "sysArgs4"
+
+  ld        "sysArgs5"
+  addi      1
+  st        "sysArgs5"
+
+  ldwi      pixel_address(0,120)
+  xorw      "sysArgs4"
+  bne       "clearScreen_nextPixel"
+end
+
+ldwi        0x14a0
+call        "vAC"
+
+org         0x14a0
+
+gt_procedure "generateGem" do
+  ldwi      "SYS_Random_34"
+  stw       "sysFn"
+  sys       34
+  # Random value between 0-3 for gem color
+  ld        -> { value_of("entropy") + 0 }
+  andi      3
+  addi      2
+  stw       "scratch_a"
+  # Random value between 0-3 for smasher. if == 0 then smasher.
+  ld        -> { value_of("entropy") + 1 }
+  andi      3
+  bne       "returnGem"
+  ldi       4
+  addw      "scratch_a"
+  st        "scratch_a"
+  label     "returnGem"
+  ld        "scratch_a"
+end
+
+gt_procedure "spawnGem" do
+  push
+
+  # Set current gem:
+  #   - colors from next gem A and B
+  #   - position, rotation, and order are reset
+  ld        "nextGem_colorA"
+  st        "currentGem_colorA"
+  ld        "nextGem_colorB"
+  st        "currentGem_colorB"
+  ldwi      board_pixel_address(2, 0)
+  stw       "currentGem_posX"
+  ldi       0
+  st        "currentGem_rotation"
+  st        "currentGem_order"
+
+  # Generate next gem A
+  call      "generateGem"
+  st        "currentGem_colorA"
+
+  # Generate next gem B
+  call      "generateGem"
+  st        "currentGem_colorB"
+
+  pop
+end
+
+ldwi        0x0ca0
+call        "vAC"
+
+org         0x0ca0
 
 gt_procedure "handleInputDown" do
   ld        "buttonState"
@@ -776,44 +1023,6 @@ gt_procedure "handleInputDown" do
   label     "handleInputDown_done"
   st        "tickRate"
 end
-
-ldwi        0x0ba0
-call        "vAC"
-
-org         0x0ba0
-
-gt_procedure "drawGem" do
-  ldwi      "SYS_Sprite6_v3_64"
-  stw       "sysFn"
-
-  ld        "scratch_a"
-  lslw
-  addwi     "gemPointers"
-  deek
-  stw       "sysArgs0"
-
-  ldw       "scratch_b"
-  sys       64
-end
-
-gt_procedure "blankGem" do
-  stw       "scratch_a"
-
-  ldwi      "SYS_Sprite6_v3_64"
-  stw       "sysFn"
-
-  ldwi      "gems_0"
-  stw       "sysArgs0"
-
-  ldw       "scratch_a"
-
-  sys       64
-end
-
-ldwi        0x0ca0
-call        "vAC"
-
-org         0x0ca0
 
 gt_procedure "reset" do
   push
@@ -878,6 +1087,9 @@ gt_loop "main" do
 
   call      "checkAndDrop"
   call      "gravity"
+  call      "detectSmasher"
+  call      "createGroup"
+  call      "smash"
 
   label     "tickDone"
 
@@ -889,7 +1101,7 @@ halt
 org         0x0ea0
 
 label       "gemPointers"
-10.times do |i|
+14.times do |i|
   byte      -> { value_of("gems_#{i}") & 0xff }
   byte      -> { value_of("gems_#{i}") >> 8 }
 end
@@ -915,5 +1127,51 @@ org         0x0fa0 + ORANGE_SMASHER
 byte        16
 org         0x0fa0 + PURPLE_SMASHER
 byte        18
+
+label       "gemPointers_isSmasher", 0x10a0
+org         0x10a0 + BLACK
+byte        1
+org         0x10a0 + GREY
+byte        1
+org         0x10a0 + RED
+byte        1
+org         0x10a0 + BLUE
+byte        1
+org         0x10a0 + ORANGE
+byte        1
+org         0x10a0 + PURPLE
+byte        1
+org         0x10a0 + RED_SMASHER
+byte        0
+org         0x10a0 + BLUE_SMASHER
+byte        0
+org         0x10a0 + ORANGE_SMASHER
+byte        0
+org         0x10a0 + PURPLE_SMASHER
+byte        0
+
+label       "gemPointers_getSmashed", 0x11a0
+org         0x11a0 + RED_SMASHER
+byte        20
+org         0x11a0 + BLUE_SMASHER
+byte        22
+org         0x11a0 + ORANGE_SMASHER
+byte        24
+org         0x11a0 + PURPLE_SMASHER
+byte        26
+
+org         0x12a0
+
+label       "smashStack"
+96.times do
+  byte      0
+end
+
+org         0x15a0
+
+label       "smashCheckedStack"
+96.times do
+  byte      0
+end
 
 done        0x0200
