@@ -247,7 +247,13 @@ def _var_address(length = 2)
 end
 
 def allocate_var(name, length = 2)
-  label name, _var_address(length)
+  address = _var_address(length)
+
+  label name, address
+
+  length.times do |i|
+    label "#{name}_#{i}", address + i
+  end
 end
 
 def name(name)
@@ -263,10 +269,10 @@ def done(start_address = 0x200)
     break if address.nil?
     next if bytes.empty?
 
-    puts " └─ Segment 0x#{address.to_s(16)} (#{bytes.count} bytes)"
+    puts " └─ Segment 0x#{address.to_s(16).rjust(4, "0")} (#{bytes.count} bytes)"
 
     if (address + bytes.count) > ((address | 255) + 1)
-      err("Page overrun in segment 0x#{address.to_s(16)}!")
+      err("Page overrun in segment 0x#{address.to_s(16).rjust(4, "0")}!")
     end
 
     bytes = bytes.map{ |byte| _eval_byte(byte) }
