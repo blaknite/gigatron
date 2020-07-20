@@ -6,6 +6,9 @@ TICKS_PER_FRAME = 30
 TICK_RATE = 1
 TICK_RATE_FAST = 10
 
+FRAMES_PER_SECOND = 120
+GAME_SECONDS = 150
+
 BOARD_ORIGIN_X = 62
 BOARD_ORIGIN_Y = 24
 BOARD_WIDTH = 6
@@ -66,6 +69,9 @@ allocate_var "scoreThousands"
 
 allocate_var "smashThisTick"
 allocate_var "smashCombo"
+
+allocate_var "framesRemaining"
+allocate_var "secondsRemaining"
 
 def board_address(x, y)
   value_of("board") + x + ( y * BOARD_WIDTH )
@@ -961,14 +967,14 @@ gt_procedure "drawScore" do
   ldwi      "numberPointers"
   stw       "scratch_b"
 
-  ldw       "scoreThousands"
-  addw      "scratch_a"
-  peek
-  addw      "scratch_b"
-  deek
-  stw       "sysArgs0"
-  ldwi      board_pixel_address(-7, 2) + 3
-  sys       64
+  # ldw       "scoreThousands"
+  # addw      "scratch_a"
+  # peek
+  # addw      "scratch_b"
+  # deek
+  # stw       "sysArgs0"
+  # ldwi      board_pixel_address(-7, 2)
+  # sys       64
 
   ldw      "scoreHundreds"
   addw     "scratch_a"
@@ -976,7 +982,7 @@ gt_procedure "drawScore" do
   addw      "scratch_b"
   deek
   stw       "sysArgs0"
-  ldwi      board_pixel_address(-6, 2) + 3
+  ldwi      board_pixel_address(-6, 2) - 3
   sys       64
 
   ldw       "scoreTens"
@@ -985,7 +991,7 @@ gt_procedure "drawScore" do
   addw      "scratch_b"
   deek
   stw       "sysArgs0"
-  ldwi      board_pixel_address(-5, 2) + 3
+  ldwi      board_pixel_address(-5, 2) - 3
   sys       64
 
   ldw       "scoreUnits"
@@ -994,8 +1000,62 @@ gt_procedure "drawScore" do
   addw      "scratch_b"
   deek
   stw       "sysArgs0"
-  ldwi      board_pixel_address(-4, 2) + 3
+  ldwi      board_pixel_address(-4, 2) - 3
   sys       64
+
+  ldwi      "number_0"
+  stw       "sysArgs0"
+  ldwi      board_pixel_address(-3, 2) - 3
+  sys       64
+end
+
+ldwi        0x25a0
+call        "vAC"
+
+org         0x25a0
+
+gt_procedure "drawGameTime" do
+  ldwi      pixel_address(5, 115)
+  stw       "scratch_a"
+
+  label     "drawGameTime_nextPixel"
+  ldi       rgb_convert(0, 170, 255)
+  poke      "scratch_a"
+
+  inc       "scratch_a"
+  ld        "scratch_a"
+  xori      GAME_SECONDS + 5
+  bne       "drawGameTime_nextPixel"
+end
+
+ldwi        0x26a0
+call        "vAC"
+
+org         0x26a0
+
+gt_procedure "updateGameTime" do
+  ld        "framesRemaining"
+  subi      1
+  st        "framesRemaining"
+  bne       "updateGameTime_done"
+
+  ldi       FRAMES_PER_SECOND
+  st        "framesRemaining"
+
+  ld        "secondsRemaining"
+  subi      1
+  st        "secondsRemaining"
+
+  ldwi      pixel_address(5, 115)
+  addw      "secondsRemaining"
+  stw       "scratch_a"
+  ldi       rgb_convert(0, 0, 170)
+  poke      "scratch_a"
+
+  ld        "secondsRemaining"
+  bne       "updateGameTime_done"
+
+  label     "updateGameTime_done"
 end
 
 ldwi        0x19a0
@@ -1023,6 +1083,18 @@ gt_procedure "drawNextHeading" do
   stw       "sysArgs0"
   ldwi      board_pixel_address(11, 0)
   sys       64
+end
+
+gt_procedure "handleInputDown" do
+  ld        "buttonState"
+  andi      BUTTON_DOWN
+  bne       "handleInputDown_slow"
+  ldi       TICK_RATE_FAST
+  bra       "handleInputDown_done"
+  label     "handleInputDown_slow"
+  ldi       TICK_RATE
+  label     "handleInputDown_done"
+  st        "tickRate"
 end
 
 ldwi        0x20a0
@@ -1067,19 +1139,19 @@ gt_procedure "drawGameOver" do
 
   ldwi      "over_0"
   stw       "sysArgs0"
-  ldwi      board_pixel_address(1, 14)
+  ldwi      board_pixel_address(1, 14) - 0x0200
   sys       64
   ldwi      "over_1"
   stw       "sysArgs0"
-  ldwi      board_pixel_address(2, 14)
+  ldwi      board_pixel_address(2, 14) - 0x0200
   sys       64
   ldwi      "over_2"
   stw       "sysArgs0"
-  ldwi      board_pixel_address(3, 14)
+  ldwi      board_pixel_address(3, 14) - 0x0200
   sys       64
   ldwi      "over_3"
   stw       "sysArgs0"
-  ldwi      board_pixel_address(4, 14)
+  ldwi      board_pixel_address(4, 14) - 0x0200
   sys       64
 end
 
@@ -1310,25 +1382,8 @@ call        "vAC"
 
 org         0x10a0
 
-gt_procedure "handleInputDown" do
-  ld        "buttonState"
-  andi      BUTTON_DOWN
-  bne       "handleInputDown_slow"
-  ldi       TICK_RATE_FAST
-  bra       "handleInputDown_done"
-  label     "handleInputDown_slow"
-  ldi       TICK_RATE
-  label     "handleInputDown_done"
-  st        "tickRate"
-end
-
 gt_procedure "reset" do
   push
-
-  call      "clearScreen"
-  call      "drawBoard"
-  call      "drawScoreHeading"
-  call      "drawNextHeading"
 
   ld        "frameCount"
   stw       "lastFrame"
@@ -1357,7 +1412,18 @@ gt_procedure "reset" do
   stw       "smashThisTick"
   stw       "smashCombo"
 
+  ldi       FRAMES_PER_SECOND
+  stw       "framesRemaining"
+
+  ldi       GAME_SECONDS
+  stw       "secondsRemaining"
+
+  call      "clearScreen"
+  call      "drawBoard"
+  call      "drawScoreHeading"
+  call      "drawNextHeading"
   call      "drawScore"
+  call      "drawGameTime"
 
   call      "spawnGem"
   call      "spawnGem"
@@ -1375,6 +1441,10 @@ call        "reset"
 
 gt_loop "main" do
   call      "waitFrame"
+
+  call      "updateGameTime"
+  ld        "secondsRemaining"
+  beq       "gameOver"
 
   call      "eraseCurrentGem"
 
