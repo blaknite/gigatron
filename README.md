@@ -20,3 +20,7 @@ Draws a Buildkite logo.
 ### parsec.rb - Parsec Game
 
 A side-scrolling space shoot-em-up. Still under development.
+
+### puzzles.rb
+
+A gem matching and smashing puzzle game. https://forum.gigatron.io/viewtopic.php?f=4&t=250&sid=a2c45917d5e7dc3f94296cea6e97ca33
