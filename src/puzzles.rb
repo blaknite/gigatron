@@ -661,7 +661,7 @@ gt_procedure "gravity" do
 
   ld        "scratch_d"
   bne       "gravity_noTone"
-  ldi       72
+  ldi       73
   call      "playTone"
   label     "gravity_noTone"
 
