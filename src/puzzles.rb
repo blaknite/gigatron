@@ -215,6 +215,8 @@ gt_procedure "checkAndDrop" do
   subi      GEM_SIZE
   st        "currentGem_posY"
 
+  ldi       73
+  call      "playTone"
   call      "drawCurrentGem"
   call      "spawnGem"
 
@@ -581,11 +583,16 @@ gt_procedure "handleInputRight" do
 end
 
 gt_procedure "gravity" do
+  push
+
   ldwi      "SYS_Sprite6_v3_64"
   stw       "sysFn"
 
   ldwi      board_pixel_address(5, 10)
   stw       "scratch_a"
+
+  ldi       1
+  st        "scratch_d"
 
   label     "gravity_loop"
   ldwi      GEM_SIZE << 8
@@ -631,6 +638,9 @@ gt_procedure "gravity" do
   stw       "sysArgs0"
   ldw       "scratch_c"
   sys       64
+
+  ldi       0
+  st        "scratch_d"
   bra       "gravity_nextCell"
 
   label     "gravity_nextCell"
@@ -648,6 +658,14 @@ gt_procedure "gravity" do
   st        "scratch_a_1"
   xori      board_pixel_address(0, -1) >> 8
   bne       "gravity_loop"
+
+  ld        "scratch_d"
+  bne       "gravity_noTone"
+  ldi       72
+  call      "playTone"
+  label     "gravity_noTone"
+
+  pop
 end
 
 ldwi        0x0600
@@ -1058,6 +1076,75 @@ gt_procedure "updateGameTime" do
   label     "updateGameTime_done"
 end
 
+ldwi        0x27a0
+call        "vAC"
+
+org         0x27a0
+
+gt_procedure "resetAudio" do
+  ldwi      ["channel1", "wavA"]
+  stw       "scratch_a"
+  ldwi      0x0100
+  doke      "scratch_a"
+
+  ldwi      ["channel2", "wavA"]
+  stw       "scratch_a"
+  ldwi      0x0200
+  doke      "scratch_a"
+
+  ldwi      ["channel3", "wavA"]
+  stw       "scratch_a"
+  ldwi      0x0000
+  doke      "scratch_a"
+
+  ldwi      ["channel4", "wavA"]
+  stw       "scratch_a"
+  ldwi      0x0000
+  doke      "scratch_a"
+end
+
+ldwi        0x28a0
+call        "vAC"
+
+org         0x28a0
+
+gt_procedure "playTone" do
+  lslw
+  stw       "scratch_a"
+
+  ldwi      "notesTable"
+  addw      "scratch_a"
+  stw       "scratch_a"
+  lup       0x00
+  st        "scratch_b"
+  ldw       "scratch_a"
+  lup       0x01
+  st        ["scratch_b", 1]
+
+  ldwi      ["channel1", "keyL"]
+  stw       "scratch_c"
+  ldw       "scratch_b"
+  doke      "scratch_c"
+
+  ldwi      ["channel2", "keyL"]
+  stw       "scratch_c"
+  ldw       "scratch_b"
+  doke      "scratch_c"
+
+  ldwi      ["channel3", "keyL"]
+  stw       "scratch_c"
+  ldi       0
+  doke      "scratch_c"
+
+  ldwi      ["channel4", "keyL"]
+  stw       "scratch_c"
+  ldi       0
+  doke      "scratch_c"
+
+  ldi       3
+  st        "soundTimer"
+end
+
 ldwi        0x19a0
 call        "vAC"
 
@@ -1271,8 +1358,8 @@ gt_procedure "handleInputUp" do
   subi      GEM_SIZE
   st        "currentGem_posY"
 
-  call      "drawCurrentGem"
-  call      "spawnGem"
+  ldi       0
+  st        "tickCounter"
 
   label     "handleInputUp_done"
   pop
@@ -1332,12 +1419,12 @@ gt_procedure "generateGem" do
   stw       "sysFn"
   sys       34
   # Random value between 0-3 for gem color
-  ld        -> { value_of("entropy") + 0 }
+  ld        "entropy"
   andi      3
   addi      2
   stw       "scratch_a"
   # Random value between 0-3 for smasher. if == 0 then smasher.
-  ld        -> { value_of("entropy") + 1 }
+  ld        ["entropy", 1]
   andi      3
   bne       "returnGem"
   ldi       4
@@ -1418,6 +1505,8 @@ gt_procedure "reset" do
   ldi       GAME_SECONDS
   stw       "secondsRemaining"
 
+  call      "resetAudio"
+
   call      "clearScreen"
   call      "drawBoard"
   call      "drawScoreHeading"
@@ -1436,7 +1525,6 @@ call        "vAC"
 
 org         0x11a0
 
-label       "newGame"
 call        "reset"
 
 gt_loop "main" do
@@ -1486,13 +1574,46 @@ gt_loop "main" do
   call      "drawCurrentGem"
 end
 
-gt_loop "gameOver" do
+label       "gameOver"
+ldi         TICK_RATE
+st          "tickRate"
+call        "drawGameOver"
+ldi         36
+stw         "scratch_d"
+ldi         37
+stw         "scratch_e"
+ldwi        0x29a0
+call        "vAC"
+
+org         0x29a0
+
+gt_loop "gameOver_loop" do
+  call      "waitFrame"
+
   ld        "buttonState"
   andi      BUTTON_A
   beq       "newGame"
 
-  call      "drawGameOver"
+  ld        "tickCounter"
+  subw      "tickRate"
+  st        "tickCounter"
+  bgt       "gameOver_tickDone"
+  ldi       5
+  st        "tickCounter"
+
+  ld        "scratch_d"
+  beq       "gameOver_tickDone"
+  subi      12
+  st        "scratch_d"
+  addw      "scratch_e"
+  call      "playTone"
+
+  label     "gameOver_tickDone"
 end
+
+label       "newGame"
+ldwi        0x11a0
+call        "vAC"
 
 halt
 

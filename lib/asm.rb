@@ -318,11 +318,17 @@ def _branch_adjust(byte)
 end
 
 def _eval_byte(byte)
+  if byte.is_a?(Array)
+    byte = byte.reduce(0) { |sum, b| sum + _eval_byte(b) }
+  end
+
   byte = byte.call if byte.respond_to? :call
+
   if byte.is_a?(String) && byte.length > 1
     err("Undefined label `#{byte}`") unless label?(byte)
     byte = $_labels[byte]
   end
+
   byte.ord
 end
 
