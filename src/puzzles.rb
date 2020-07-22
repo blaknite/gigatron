@@ -1531,17 +1531,17 @@ call        "reset"
 
 gt_loop "main" do
   ld        "buttonState"
-  ori       0b00110000
+  ori       0b00110100
   xori      0b11111111
   beq       "handleInputDone"
   call      "eraseCurrentGem"
   call      "handleInputRotate"
   call      "handleInputSwitch"
   call      "handleInputUp"
-  call      "handleInputDown"
   call      "handleInputLeft"
   call      "handleInputRight"
   label     "handleInputDone"
+  call      "handleInputDown"
 
   ld        "frameCount"
   xorw      "lastFrame"
