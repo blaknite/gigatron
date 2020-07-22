@@ -1598,7 +1598,7 @@ stw         "scratch_e"
 
 gt_loop "gameOver_loop" do
   ld        "buttonState"
-  andi      BUTTON_A
+  andi      BUTTON_START
   beq       "newGame"
 
   ld        "frameCount"
