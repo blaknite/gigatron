@@ -1370,12 +1370,14 @@ call        "vAC"
 
 org         0x0ea0
 
-gt_procedure "waitFrame" do |start_label, return_label|
-  ld        "frameCount"
-  xorw      "lastFrame"
-  beq       start_label
-  ld        "frameCount"
-  st        "lastFrame"
+gt_procedure "checkGameOver" do
+  ldwi      board_pixel_address(2, 0)
+  peek
+  bne       "checkGameOver_done"
+  ldwi      board_pixel_address(3, 0)
+  peek
+  bne       "checkGameOver_done"
+  label     "checkGameOver_done"
 end
 
 gt_procedure "clearScreen" do
@@ -1528,20 +1530,27 @@ org         0x11a0
 call        "reset"
 
 gt_loop "main" do
-  call      "waitFrame"
-
-  call      "updateGameTime"
-  ld        "secondsRemaining"
-  beq       "gameOver"
-
+  ld        "buttonState"
+  ori       0b00110000
+  xori      0b11111111
+  beq       "handleInputDone"
   call      "eraseCurrentGem"
-
   call      "handleInputRotate"
   call      "handleInputSwitch"
   call      "handleInputUp"
   call      "handleInputDown"
   call      "handleInputLeft"
   call      "handleInputRight"
+  label     "handleInputDone"
+
+  ld        "frameCount"
+  xorw      "lastFrame"
+  beq       "frameDone"
+  ld        "frameCount"
+  st        "lastFrame"
+
+  call      "updateGameTime"
+  beq       "gameOver"
 
   ld        "tickCounter"
   subw      "tickRate"
@@ -1549,6 +1558,8 @@ gt_loop "main" do
   bgt       "tickDone"
   ldi       TICKS_PER_FRAME
   st        "tickCounter"
+
+  call      "eraseCurrentGem"
 
   ld        "currentGem_posY"
   addi      GEM_SIZE
@@ -1562,19 +1573,21 @@ gt_loop "main" do
   call      "detectChain"
   call      "drawScore"
 
-  label     "tickDone"
+  call      "checkGameOver"
+  bne       "gameOver"
 
-  ldwi      board_pixel_address(2, 0)
-  peek
-  bne       "gameOver"
-  ldwi      board_pixel_address(3, 0)
-  peek
-  bne       "gameOver"
+  label     "tickDone"
+  label     "frameDone"
 
   call      "drawCurrentGem"
 end
 
 label       "gameOver"
+ldwi        0x29a0
+call        "vAC"
+
+org         0x29a0
+
 ldi         TICK_RATE
 st          "tickRate"
 call        "drawGameOver"
@@ -1582,18 +1595,17 @@ ldi         36
 stw         "scratch_d"
 ldi         37
 stw         "scratch_e"
-ldwi        0x29a0
-call        "vAC"
-
-org         0x29a0
 
 gt_loop "gameOver_loop" do
-  call      "waitFrame"
-
   ld        "buttonState"
   andi      BUTTON_A
   beq       "newGame"
 
+  ld        "frameCount"
+  xorw      "lastFrame"
+  beq       "gameOver_tickDone"
+  ld        "frameCount"
+  st        "lastFrame"
   ld        "tickCounter"
   subw      "tickRate"
   st        "tickCounter"
